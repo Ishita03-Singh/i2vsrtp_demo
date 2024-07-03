@@ -38,8 +38,9 @@ dependencies:
   localstore: ^1.2.3
   webview_flutter:
   web_socket_channel:
-  h264:
-    path: E:\i2vprojects\h264Plugin\flutter_plugin_h264
+  flutter_inappwebview:
+  # h264:
+    # path: E:\i2vprojects\h264Plugin\flutter_plugin_h264
 
 dev_dependencies:
   flutter_test:

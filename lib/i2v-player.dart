@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter/material.dart';
-import 'package:h264/h264.dart';
+// import 'package:h264/h264.dart';
 import 'package:srtp_demo/changables.dart';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -73,19 +73,19 @@ class I2vSdk {
 
   void SeekVideo(int startTime) {
     if (player != null && player?.mode != "Live") {
-      player?.SeekVideo(startTime);
+      // player?.SeekVideo(startTime);
     }
   }
 
   void Pause() {
     if (player != null && player?.mode != "Live") {
-      player?.Pause();
+      // player?.Pause();
     }
   }
 
   void FastForward(double factor) {
     if (player != null && player?.mode != "Live") {
-      player?.FastForward(factor);
+      // player?.FastForward(factor);
     }
   }
 }
@@ -168,7 +168,7 @@ class I2vPlayer {
 
   void stop() {
     try {
-      removeErrorMessage();
+      // removeErrorMessage();
       doesStopRequested = true;
       if (w != null) {
         w.sink.close();
@@ -195,313 +195,291 @@ class I2vPlayer {
   }
 
   void play() async {
-    var protocolType = "ws";
-    var port = 8181;
-    if (useSecureConnection) {
-      protocolType = "wss";
-      port = 8182;
-    }
-    removeErrorMessage();
-    IsEmptyUrl = false;
-    if (!IsEmptyUrl) showErrorMessage("Trying to Connect...");
-    IsPlayerServerConnected = false;
-    URL_Server_Not_Connected = false;
-    Uri uri = Uri.parse(
-        "$protocolType://$wPlayerIp:$port?cameraId~~$cameraId&&mode~~$mode&&streamType~~$streamType&&startTime~~$startTime&&endTime~~$endTime&&analyticType~~$analyticType&&connectionMode~~$connectionMode&&wServerIp~~$wServerIp&&wServerPort~~$wServerPort&&clVersion~~$clVersion&&playbackSpeed~~$playbackSpeed");
-    print(uri.toString());
-    w = WebSocketChannel.connect(uri);
-    // w.binaryType = 'arraybuffer';
-    // await w.ready;
-    // w.stream.listen((open){
 
-    // });
-    w.stream.listen((data) async {
-      // print(data);
-
-      if (data == 'open') {
-        doesStopRequested = false;
-        w.sink.add('Hello Server!');
-      }
-
-      // if (data == 'message') {
-      IsEmptyUrl = false;
-      IsPlayerServerConnected = false;
-      URL_Server_Not_Connected = false;
-      var dataStr = data.toString();
-      if (dataStr.startsWith("--version")) {
-        svVersion = dataStr.substring(10);
-        print("Client Version: $clVersion");
-        print("Server Version: $svVersion");
-        return;
-      } else if (dataStr.startsWith("--servStatus")) {
-        print(dataStr.substring(13));
-        return;
-      }
-      switch (dataStr) {
-        case "Server_ip_not_provided":
-          var errMsg = "Please Provide Valid Server Ip";
-          if (errorCallback != null) {
-            errorCallback!(errMsg);
-          }
-          showErrorMessage(errMsg);
-          return;
-        case "Playback_Finished":
-          var errMsg = "Playback_Finished";
-          print(errMsg);
-          if (errorCallback != null) {
-            errorCallback!(errMsg);
-          }
-          stop();
-          return;
-        case "Video_Started":
-          var errMsg = "Video_Started";
-          print(errMsg);
-          if (errorCallback != null) {
-            errorCallback!(errMsg);
-          }
-          return;
-        case "unable_to_play":
-          var errMsg = "unable_to_play";
-          print(errMsg);
-          if (errorCallback != null) {
-            errorCallback!(errMsg);
-          }
-          stop();
-          return;
-        case "EmptyUrl":
-          IsEmptyUrl = true;
-          var errMsg =
-              mode == "Live" ? "Stream not Found" : "Recording not Found";
-          if (errorCallback != null) {
-            errorCallback!(errMsg);
-          }
-          showErrorMessage(errMsg);
-          return;
-        case "Player_Server_Not_Connected":
-          IsPlayerServerConnected = true;
-          var errMsg = "Player Server Not Connected ";
-          if (errorCallback != null) {
-            errorCallback!(errMsg);
-          }
-          showErrorMessage(errMsg);
-          return;
-        case "URL_Server_Not_Connected":
-          URL_Server_Not_Connected = true;
-          var errMsg = "URL Server Not Connected";
-          if (errorCallback != null) {
-            errorCallback!(errMsg);
-          }
-          showErrorMessage(errMsg);
-          return;
-      }
-      // if (!isPlayerSet) {
-      print("rdbaData:: ${data}");
-      if (data != 'mp4') {
-        var dt = await H264
-            .decodeFrame(
-              data,
-              data,
-              200,
-              200,
-            )
-            .then((ignored) => data);
-
-        print("decoded data :: ${dt}");
-
-        var rgba_data = Uint8List.fromList(data);
-
+InAppWebViewController _webViewController;
         // ui.Image img =await   _loadImageFromBytes(rgba_data, 200, 200);
         changables.videoContainerWidget.value = Container(
-          child: Image.memory(rgba_data, width: 200, height: 200),
           width: 200,
           color: Colors.black,
           height: 200,
-        );
-      }
+          child:InAppWebView(
+                    initialData: InAppWebViewInitialData(
+                      data: """
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    </head>
+    <body>
+        <h1>JavaScript Handlers (Channels) TEST</h1>
+        <script>
+            window.addEventListener("flutterInAppWebViewPlatformReady", function(event) {
+                window.flutter_inappwebview.callHandler('handlerFoo')
+                  .then(function(result) {
+                    // print to the console the data coming
+                    // from the Flutter side.
+                    console.log(JSON.stringify(result));
+                    
+                    window.flutter_inappwebview
+                      .callHandler('handlerFooWithArgs', 1, true, ['bar', 5], {foo: 'baz'}, result);
+                });
+            });
+        </script>
+    </body>
+</html>
+                      """
+                    ),
+                    // initialOptions: InAppWebViewGroupOptions(
+                    //     crossPlatform: InAppWebViewOptions(
+                    //       debuggingEnabled: true,
+                    //     )
+                    // ),
+                    onWebViewCreated: (InAppWebViewController controller) {
+                      _webViewController = controller;
 
-      if (isRgb) {
-        //Create a canvas element for RGB data
+                      _webViewController.addJavaScriptHandler(handlerName:'handlerFoo', callback: (args) {
+                        // return data to JavaScript side!
+                        return {
+                          'bar': 'bar_value', 'baz': 'baz_value'
+                        };
+                      });
 
-        // changables.videoContainerWidget.value = Container(
-        //   key: Key("${elId}_canvas"),
-        //   color: Colors.black,
-        //   height: 200,
-        //   width: 200,
-        // );
-
-        // var c = document.createElement('canvas');
-        // c.id = "${elId}_canvas";
-        // document.getElementById(elId).append(c);
-        // width = document.getElementById(elId).clientWidth;
-        // height = document.getElementById(elId).clientHeight;
-        // c.width = width;
-        // c.height = height;
-      } else {
-        // changables.videoContainerWidget.value = Container(
-        //   key: Key("${elId}_video"),
-        //   height: 200,
-        //   color: Colors.black,
-        //   width: 200,
-        // );
-        // var v = document.createElement('video');
-        // v.id = "${elId}_video";
-        // v.controls = true;
-        // document.getElementById(elId).append(v);
-        // v.style.width = "100%";
-        // v.style.height = "100%";
-        // jmuxer = JMuxer({
-        //   'node': v,
-        //   'mode': mode.toLowerCase() == "playback" ? 'both' : 'video',
-        //   'flushingTime': 0,
-        //   'clearBuffer': true,
-        //   'debug': false
-        // });
-      }
-      isPlayerSet = true;
-      // }
-      if (isRgb) {
-        var frameLen = 1000 / 24;
-        var p = 0;
-        // var c = document.getElementById("${elId}_canvas");
-        // if (c != null) {
-        //   var c_context = c.getContext('2d');
-        //   c_context.clearRect(0, 0, width, height);
-        //   var imgData = c_context.createImageData(width, height);
-        var rgba_data = Uint8List.fromList(data);
-        // ui.Image img =await   _loadImageFromBytes(rgba_data, 200, 200);
-        changables.videoContainerWidget.value = Container(
-          child: Image.memory(rgba_data),
-          width: 200,
-          color: Colors.black,
-          height: 200,
+                      _webViewController.addJavaScriptHandler(handlerName: 'handlerFooWithArgs', callback: (args) {
+                        print(args);
+                        // it will print: [1, true, [bar, 5], {foo: baz}, {bar: bar_value, baz: baz_value}]
+                      });
+                    },
+                    onConsoleMessage: (controller, consoleMessage) {
+                      print(consoleMessage);
+                      // it will print: {message: {"bar":"bar_value","baz":"baz_value"}, messageLevel: 1}
+                    },
+                ),
+           
         );
 
-        // var ndata = 200 * 200 * 4;
-        // for (var i = 0; i < ndata; i += 4) {
-        //   imgData.data[i] = rgba_data[p];
-        //   imgData.data[i + 1] = rgba_data[p + 1];
-        //   imgData.data[i + 2] = rgba_data[p + 2];
-        //   imgData.data[i + 3] = 255;
-        //   p += 3;
-        // }
-        // c_context.putImageData(imgData, 0, 0);
-        //   }
-        // } else {
-        //   jmuxer.feed({'video': e.data});
-        // }
-        removeErrorMessage();
-        isVisible = true;
-      }
-      // }
-      if (data == 'error') {
-        showErrorMessage("Player Not Connected...");
-        w = null;
-        if (jmuxer != null) {
-          disposejmuxer();
-        }
-        c = null;
-        v = null;
-        isPlayerSet = false;
-        isVisible = false;
-        if (isRgb) {
-          changables.videoContainerWidget.value = Container(
-              child: Text("error Palying RGB",
-                  style: TextStyle(color: Colors.red)),
-              color: Colors.black,
-              width: 200,
-              height: 200);
-          // var c = document.getElementById("${elId}_canvas");
-          // if (c != null) {
-          //   var c_context = c.getContext('2d');
-          //   c_context.clearRect(0, 0, width, height);
-          //   c.parentNode.removeChild(c);
-          // }
-        } else {
-          changables.videoContainerWidget.value = Container(
-              child: Text("error Palying", style: TextStyle(color: Colors.red)),
-              width: 200,
-              height: 200,
-              color: Colors.black);
-          // var v = document.getElementById("${elId}_video");
-          // if (v != null) {
-          //   v.src = "";
-          //   v.parentNode.removeChild(v);
-          // }
-        }
-        Future.delayed(Duration(seconds: 3), () {
-          if (!doesStopRequested) {
-            play();
-          }
-        });
-      }
+  //   var protocolType = "ws";
+  //   var port = 8181;
+  //   if (useSecureConnection) {
+  //     protocolType = "wss";
+  //     port = 8182;
+  //   }
+  //   removeErrorMessage();
+  //   IsEmptyUrl = false;
+  //   if (!IsEmptyUrl) showErrorMessage("Trying to Connect...");
+  //   IsPlayerServerConnected = false;
+  //   URL_Server_Not_Connected = false;
 
-      if (data == 'close') {
-        if (doesStopRequested) {
-          print('socket closed');
-          removeErrorMessage();
-        } else {
-          print('socket closed and retrying...');
-          if (IsPlayerServerConnected) {
-            var errMsg = "Player Server Not Connected ";
-            showErrorMessage(errMsg);
-          } else if (URL_Server_Not_Connected) {
-            var errMsg = "URL Server Not Connected";
-            showErrorMessage(errMsg);
-          } else if (IsEmptyUrl) {
-            var errMsg =
-                mode == "Live" ? "Stream not Found" : "Recording not Found";
-            showErrorMessage(errMsg);
-          } else {
-            showErrorMessage("Player Not Connected...");
-          }
-          w = null;
-          if (jmuxer != null) {
-            disposejmuxer();
-          }
-          c = null;
-          v = null;
-          isPlayerSet = false;
-          isVisible = false;
-          if (isRgb) {
-            changables.videoContainerWidget.value = Container(
-                child: Text("remove video RGB",
-                    style: TextStyle(color: Colors.red)),
-                width: 200,
-                height: 200,
-                color: Colors.black);
-            // var c = document.getElementById("${elId}_canvas");
-            // if (c != null) {
-            //   var c_context = c.getContext('2d');
-            //   c_context.clearRect(0, 0, width, height);
-            //   c.parentNode.removeChild(c);
-            // }
-          } else {
-            changables.videoContainerWidget.value = Container(
-                child:
-                    Text("error Palying", style: TextStyle(color: Colors.red)),
-                width: 200,
-                height: 200,
-                color: Colors.black);
-            // var v = document.getElementById("${elId}_video");
-            // if (v != null) {
-            //   v.src = "";
-            //   v.parentNode.removeChild(v);
-            // }
-          }
-          Future.delayed(Duration(seconds: 3), () {
-            if (!doesStopRequested) {
-              play();
-            }
-          });
-        }
-      }
-    });
-    // w.stream.listen('message', (e) {
+    
 
-    // });
+  //   Uri uri = Uri.parse(
+  //       "$protocolType://$wPlayerIp:$port?cameraId~~$cameraId&&mode~~$mode&&streamType~~$streamType&&startTime~~$startTime&&endTime~~$endTime&&analyticType~~$analyticType&&connectionMode~~$connectionMode&&wServerIp~~$wServerIp&&wServerPort~~$wServerPort&&clVersion~~$clVersion&&playbackSpeed~~$playbackSpeed");
+  //   print(uri.toString());
+  //   w = WebSocketChannel.connect(uri);
+  //   w.stream.listen((data) async {
+  //     if (data == 'open') {
+  //       doesStopRequested = false;
+  //       w.sink.add('Hello Server!');
+  //     }
+  //     IsEmptyUrl = false;
+  //     IsPlayerServerConnected = false;
+  //     URL_Server_Not_Connected = false;
+  //     var dataStr = data.toString();
+  //     if (dataStr.startsWith("--version")) {
+  //       svVersion = dataStr.substring(10);
+  //       print("Client Version: $clVersion");
+  //       print("Server Version: $svVersion");
+  //       return;
+  //     } else if (dataStr.startsWith("--servStatus")) {
+  //       print(dataStr.substring(13));
+  //       return;
+  //     }
+  //     switch (dataStr) {
+  //       case "Server_ip_not_provided":
+  //         var errMsg = "Please Provide Valid Server Ip";
+  //         if (errorCallback != null) {
+  //           errorCallback!(errMsg);
+  //         }
+  //         showErrorMessage(errMsg);
+  //         return;
+  //       case "Playback_Finished":
+  //         var errMsg = "Playback_Finished";
+  //         print(errMsg);
+  //         if (errorCallback != null) {
+  //           errorCallback!(errMsg);
+  //         }
+  //         stop();
+  //         return;
+  //       case "Video_Started":
+  //         var errMsg = "Video_Started";
+  //         print(errMsg);
+  //         if (errorCallback != null) {
+  //           errorCallback!(errMsg);
+  //         }
+  //         return;
+  //       case "unable_to_play":
+  //         var errMsg = "unable_to_play";
+  //         print(errMsg);
+  //         if (errorCallback != null) {
+  //           errorCallback!(errMsg);
+  //         }
+  //         stop();
+  //         return;
+  //       case "EmptyUrl":
+  //         IsEmptyUrl = true;
+  //         var errMsg =
+  //             mode == "Live" ? "Stream not Found" : "Recording not Found";
+  //         if (errorCallback != null) {
+  //           errorCallback!(errMsg);
+  //         }
+  //         showErrorMessage(errMsg);
+  //         return;
+  //       case "Player_Server_Not_Connected":
+  //         IsPlayerServerConnected = true;
+  //         var errMsg = "Player Server Not Connected ";
+  //         if (errorCallback != null) {
+  //           errorCallback!(errMsg);
+  //         }
+  //         showErrorMessage(errMsg);
+  //         return;
+  //       case "URL_Server_Not_Connected":
+  //         URL_Server_Not_Connected = true;
+  //         var errMsg = "URL Server Not Connected";
+  //         if (errorCallback != null) {
+  //           errorCallback!(errMsg);
+  //         }
+  //         showErrorMessage(errMsg);
+  //         return;
+  //     }
+  //     print("rdbaData:: ${data}");
+  //     if (data != 'mp4') {
+  //       var rgba_data = Uint8List.fromList(data);
+  //       changables.videoContainerWidget.value = Container(
+  //         child: Image.memory(rgba_data, width: 200, height: 200),
+  //         width: 200,
+  //         color: Colors.black,
+  //         height: 200,
+  //       );
+  //     }
 
-    // w.stream.listen('error', {});
+  //     if (isRgb) {
+       
+  //     } else {
+       
+  //     }
+  //     isPlayerSet = true;
+  //     // }
+  //     if (isRgb) {
+  //       var frameLen = 1000 / 24;
+  //       var p = 0;
+        
+  //       var rgba_data = Uint8List.fromList(data);
+  //       changables.videoContainerWidget.value = Container(
+  //         child: Image.memory(rgba_data),
+  //         width: 200,
+  //         color: Colors.black,
+  //         height: 200,
+  //       );
+
+  //       removeErrorMessage();
+  //       isVisible = true;
+  //     }
+  //     // }
+  //     if (data == 'error') {
+  //       showErrorMessage("Player Not Connected...");
+  //       w = null;
+  //       if (jmuxer != null) {
+  //         disposejmuxer();
+  //       }
+  //       c = null;
+  //       v = null;
+  //       isPlayerSet = false;
+  //       isVisible = false;
+  //       if (isRgb) {
+  //         changables.videoContainerWidget.value = Container(
+  //             child: Text("error Palying RGB",
+  //                 style: TextStyle(color: Colors.red)),
+  //             color: Colors.black,
+  //             width: 200,
+  //             height: 200);
+       
+  //       } else {
+  //         changables.videoContainerWidget.value = Container(
+  //             child: Text("error Palying", style: TextStyle(color: Colors.red)),
+  //             width: 200,
+  //             height: 200,
+  //             color: Colors.black);
+         
+  //       }
+  //       Future.delayed(Duration(seconds: 3), () {
+  //         if (!doesStopRequested) {
+  //           play();
+  //         }
+  //       });
+  //     }
+
+  //     if (data == 'close') {
+  //       if (doesStopRequested) {
+  //         print('socket closed');
+  //         removeErrorMessage();
+  //       } else {
+  //         print('socket closed and retrying...');
+  //         if (IsPlayerServerConnected) {
+  //           var errMsg = "Player Server Not Connected ";
+  //           showErrorMessage(errMsg);
+  //         } else if (URL_Server_Not_Connected) {
+  //           var errMsg = "URL Server Not Connected";
+  //           showErrorMessage(errMsg);
+  //         } else if (IsEmptyUrl) {
+  //           var errMsg =
+  //               mode == "Live" ? "Stream not Found" : "Recording not Found";
+  //           showErrorMessage(errMsg);
+  //         } else {
+  //           showErrorMessage("Player Not Connected...");
+  //         }
+  //         w = null;
+  //         if (jmuxer != null) {
+  //           disposejmuxer();
+  //         }
+  //         c = null;
+  //         v = null;
+  //         isPlayerSet = false;
+  //         isVisible = false;
+  //         if (isRgb) {
+  //           changables.videoContainerWidget.value = Container(
+  //               child: Text("remove video RGB",
+  //                   style: TextStyle(color: Colors.red)),
+  //               width: 200,
+  //               height: 200,
+  //               color: Colors.black);
+           
+  //         } else {
+  //           changables.videoContainerWidget.value = Container(
+  //               child:
+  //                   Text("error Palying", style: TextStyle(color: Colors.red)),
+  //               width: 200,
+  //               height: 200,
+  //               color: Colors.black);
+          
+  //         }
+  //         Future.delayed(Duration(seconds: 3), () {
+  //           if (!doesStopRequested) {
+  //             play();
+  //           }
+  //         });
+  //       }
+  //     }
+  //   });
   }
+
+//  void _loadHtmlFromAssets() async {
+//     String fileText = await rootBundle.loadString('assets/index.html');
+//     _controller.loadUrl(Uri.dataFromString(
+//       fileText,
+//       mimeType: 'text/html',
+//       encoding: Encoding.getByName('utf-8'),
+//     ).toString());
+//   }
 
   void disposejmuxer() {
     if (jmuxer != null) {
@@ -519,7 +497,7 @@ class I2vPlayer {
   }
 
   void showErrorMessage(String msg) {
-    removeErrorMessage();
+    // removeErrorMessage();
     isErrorMessageVisible = true;
     changables.videoContainerWidget.value = Container(
         child: Text(msg, style: TextStyle(color: Colors.red)),
@@ -566,4 +544,6 @@ class I2vPlayer {
       w.sink.add("FastForward:$factor");
     }
   }
+  
+  
 }
