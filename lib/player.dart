@@ -1,32 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:localstore/localstore.dart';
+import 'package:srtp_demo/i2v-player.dart';
 // import '../Models/open_camera.dart';
 // import 'iplayer.dart';
 
-class WebPlayer  {
-  
+class WebPlayer {
   dynamic controller;
-  
-  dynamic mediaplayer;
- 
 
-  
+  dynamic mediaplayer;
+
   void dispose() {
     Localstore.instance.playerRef(50).dispose(controller);
   }
 
-  
   void initialize(String playerId, String cameraId) {
     // controller = js.context.callMethod(
     //     'WebPlayerController', [serverIp, streamerIp, playerId, cameraId]);
-
+    // controller =
+    //     WebLiveController('192.168.0.48', '192.168.0.48', playerId, cameraId);
+    //  'webLiveController', [serverIp, streamerIp, playerId, cameraId]
     controller = Localstore.instance
         .playerRef(50)
-        .initialize('192.168.0.48', '192.168.0.48', playerId, cameraId);
+        .initialize('192.168.2.46', '192.168.2.46', playerId, cameraId);
   }
 
-  
   void play() {
+    // controller.Play
+    // 'Play', [controller]
     Localstore.instance.playerRef(50).play(controller);
   }
 
@@ -37,31 +37,26 @@ class WebPlayer  {
   //       () => Localstore.instance.playerRef(50).play(controller));
   // }
 
-  
   void takesnapshot() {}
-  
+
   void stop() {
     // print(controller);
     Localstore.instance.playerRef(50).dispose(controller);
   }
 
-  
   Widget player(int index) {
     PlayerRef playerRef = Localstore.instance.playerRef(50);
     return playerRef.view(index);
   }
 
-  
   void pause() {
     // js.context.callMethod('Pause', [controller]);
   }
 
-  
   void resume() {
     // js.context.callMethod('Resume', [controller]);
   }
 
-  
   void playPlayback(String playerId, String cameraId, String datetime) {
     controller = Localstore.instance.playerRef(50).initialize2(
         '192.168.0.104', '192.168.0.104', playerId, cameraId, datetime);

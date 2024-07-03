@@ -1,88 +1,92 @@
-import 'dart:html';
+import 'dart:async';
 import 'dart:typed_data';
-// import 'dart:web_audio';
-// import 'dart:web_gl';
-// import 'dart:web_socket';
+import 'dart:ui' as ui;
 
-class WebLiveController {
-  String playerIP;
-  String serverIp;
-  String playerId;
-  String cameraId;
-  var playerObj;
+import 'package:flutter/material.dart';
+import 'package:h264/h264.dart';
+import 'package:srtp_demo/changables.dart';
 
-  WebLiveController(this.playerIP, this.serverIp, this.playerId, this.cameraId) {
-    var sdk = I2vSdk(playerIP, serverIp, false, 8890);
-    playerObj = sdk.getLivePlayer(playerId, cameraId, "0", "0", "");
-
-    playerObj.setErrorCallback((err) {
-      print(err);
-    });
-
-    playerObj.setRetryingCallback((err) {
-      print("disconnected, retrying to connect!!");
-    });
-
-    playerObj.stop(() {
-      print("stop called!!!");
-    });
-
-    // playerObj.play();
-    // print("In Live_Play");
-    // print(playerObj);
-  }
-}
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 class I2vSdk {
-  String playerIp = "localhost";
+  String clVersion = "7.1.0";
+  String wPlayerIp = "localhost";
+  String wServerIp;
+  int wServerPort = 8890;
   bool useSecureConnection = false;
+  I2vPlayer? player;
 
-  I2vSdk(this.playerIp, String serverIp, bool useSecureConnection, int port);
-
-  void initPlayer(
-      String serverIP,
-      String serverType,
-      Function successCallback,
-      Function errorCallback,
-      String _playerIp,
+  I2vSdk(String _wPlayerIp, this.wServerIp, int _wServerPort,
       bool useSecureConnection) {
-    if (_playerIp.isNotEmpty) {
-      this.playerIp = _playerIp;
-    }
+    wPlayerIp = _wPlayerIp;
+    wServerPort = _wServerPort;
     if (useSecureConnection) {
       this.useSecureConnection = useSecureConnection;
     }
-    var protocolType = "ws";
-    var port = 8181;
-    if (this.useSecureConnection) {
-      protocolType = "wss";
-      port = 8182;
-    }
-    var wc = WebSocket('$protocolType://$playerIp:$port?serverIp$serverIP');
-    wc.onMessage.listen((e) {
-      if (e.data == "Ok" || e.data == "Init") {
-        successCallback();
-      } else {
-        errorCallback(e.data);
-        print(e.data);
-      }
-      wc.close();
-    });
-
-    wc.onError.listen((e) {
-      var errMsg = "Not able to connect to player.";
-      print(errMsg);
-      errorCallback(errMsg);
-      wc.close();
-    });
   }
 
-  I2vPlayer getLivePlayer(String elId, String cameraId, String mode,
-      String streamtype, String useTranscoding) {
-    var player = I2vPlayer(elId, cameraId, mode, streamtype, useTranscoding, 0,
-        "", this.useSecureConnection);
-    player.playerIp = this.playerIp;
-    return player;
+  I2vPlayer GetLivePlayer(String elId, String cameraId, String streamtype,
+      String analyticType, String connectionmode) {
+    player = I2vPlayer(
+        elId,
+        cameraId,
+        "Live",
+        streamtype,
+        0,
+        0,
+        analyticType,
+        connectionmode,
+        clVersion,
+        useSecureConnection,
+        wPlayerIp,
+        wServerIp,
+        wServerPort);
+    this.wPlayerIp = wPlayerIp;
+    this.wServerIp = wServerIp;
+    this.wServerPort = wServerPort;
+    return player!;
+  }
+
+  I2vPlayer GetPlaybackPlayer(String elId, String cameraId, int startTime,
+      int endTime, bool _playbackviaapache,
+      [double playbackSpeed = 1.0]) {
+    player = I2vPlayer(
+        elId,
+        cameraId,
+        "PlayBack",
+        "0",
+        startTime,
+        endTime,
+        "",
+        "tcp",
+        clVersion,
+        useSecureConnection,
+        wPlayerIp,
+        wServerIp,
+        wServerPort,
+        playbackSpeed);
+    player?.wPlayerIp = wPlayerIp;
+    player?.wServerIp = wServerIp;
+    player?.wServerPort = wServerPort;
+    return player!;
+  }
+
+  void SeekVideo(int startTime) {
+    if (player != null && player?.mode != "Live") {
+      player?.SeekVideo(startTime);
+    }
+  }
+
+  void Pause() {
+    if (player != null && player?.mode != "Live") {
+      player?.Pause();
+    }
+  }
+
+  void FastForward(double factor) {
+    if (player != null && player?.mode != "Live") {
+      player?.FastForward(factor);
+    }
   }
 }
 
@@ -90,270 +94,476 @@ class I2vPlayer {
   String elId;
   String cameraId;
   String mode;
-  String streamtype;
-  String useTranscoding;
-  bool useSecureConnection = false;
+  String streamType;
+  int startTime;
+  int endTime;
+  String analyticType;
+  String connectionMode;
+  String clVersion;
+  bool useSecureConnection;
+  double playbackSpeed = 1.0;
+  bool IsEmptyUrl = false;
   bool doesStopRequested = false;
-  String? playerIp;
-  dynamic v, i, b, m, intS, lastSegment;
+  bool isErrorMessageVisible = false;
+  bool IsPlayerServerConnected = false;
+  bool URL_Server_Not_Connected = false;
+  bool isRgb = false;
+  bool isVisible = true;
   bool isPlayerSet = false;
-  bool isJpeg = false;
-  bool isSourceReady = false;
+  dynamic w;
+  dynamic jmuxer;
+  int? width;
+  int? height;
+  String? svVersion;
+  dynamic v;
+  dynamic c;
   Function? errorCallback;
   Function? retryingCallback;
+  String wPlayerIp = "localhost";
+  String wServerIp;
+  int wServerPort = 8890;
 
   I2vPlayer(
       this.elId,
       this.cameraId,
       this.mode,
-      this.streamtype,
-      this.useTranscoding,
-      int ctrlInputRate,
-      String startTime,
-      this.useSecureConnection);
+      this.streamType,
+      this.startTime,
+      this.endTime,
+      this.analyticType,
+      this.connectionMode,
+      this.clVersion,
+      this.useSecureConnection,
+      this.wPlayerIp,
+      this.wServerIp,
+      this.wServerPort,
+      [this.playbackSpeed = 1.0]) {
+    if (playbackSpeed < 0.5) playbackSpeed = 0.5;
+    if (playbackSpeed > 5) playbackSpeed = 5;
+    playbackSpeed = (playbackSpeed * 2).round() / 2;
 
-  void setErrorCallback(Function callback) {
-    this.errorCallback = callback;
-  }
+    print("playbackSpeed Allowed: 0.5 to 5, with 0.5 step, 1 is default");
+    print("playbackSpeed: $playbackSpeed");
 
-  void setRetryingCallback(Function callback) {
-    this.retryingCallback = callback;
-  }
+    this.playbackSpeed = playbackSpeed;
 
-  void stop(Function callback) {
-    this.doesStopRequested = true;
-    this.v?.close();
-    this.v = null;
-    this.m = null;
-    if (this.isJpeg) {
-      var i = document.getElementById('${this.elId}_img');
-      i?.remove();
+    if (analyticType.isEmpty) analyticType = "";
+    if (connectionMode.isEmpty) {
+      connectionMode = "";
     } else {
-      var v = document.getElementById('${this.elId}_video');
-      v?.remove();
-    }
-  }
-
-  void initializeMediaSource() {
-    this.m = MediaSource();
-    var mime = 'video/mp4; codecs="avc1.4D0020"';
-    if (!MediaSource.isTypeSupported(mime)) {
-      return;
-    }
-    this.m.on['sourceopen'] = (e) {
-      try {
-        this.v.play();
-      } catch (ex) {
-        e = ex;
+      connectionMode = connectionMode.toLowerCase();
+      if (connectionMode != "tcp" && connectionMode != "udp") {
+        connectionMode = "";
       }
-      this.b = this.m.addSourceBuffer(mime);
-      this.b.mode = 'sequence';
-      this.b.on['updateend'] = (e) {
-        if (this.b.updating) {
-          return;
-        }
-        if (this.lastSegment != null) {
-          this.b.appendBuffer(this.lastSegment);
-          this.lastSegment = null;
-        }
-        if (this.b.buffered.length == 0) {
-          return;
-        }
-        var currentTime = this.v.currentTime;
-        var start = this.b.buffered.start(0);
-        var end = this.b.buffered.end(0);
-        var past = currentTime - start;
-        if (past > 20 && currentTime < end && !this.b.updating) {
-          this.b.remove(start, currentTime - 4);
-        }
-      };
-      if (!this.b.updating && this.m.readyState == 'open' && this.intS != null) {
-        this.b.appendBuffer(this.intS);
-      }
-      this.isSourceReady = true;
-    };
-  }
-
-  String arrayBufferToBase64(Uint8List buffer) {
-    var binary = '';
-    for (var i = 0; i < buffer.length; i++) {
-      binary += String.fromCharCode(buffer[i]);
     }
-    return window.btoa(binary);
   }
 
-  void play() {
+  void setErrorCallback(Function errorCallback) {
+    this.errorCallback = errorCallback;
+  }
+
+  void setRetryingCallback(Function retryingCallback) {
+    this.retryingCallback = retryingCallback;
+  }
+
+  void stop() {
+    try {
+      removeErrorMessage();
+      doesStopRequested = true;
+      if (w != null) {
+        w.sink.close();
+      }
+      v = null;
+      c = null;
+      if (isRgb) {
+        // var c = document.getElementById("${elId}_canvas");
+        // if (c != null) {
+        //   var c_context = c.getContext('2d');
+        //   c_context.clearRect(0, 0, width, height);
+        //   c.parentNode.removeChild(c);
+        // }
+      } else {
+        // var v = document.getElementById("${elId}_video");
+        // if (v != null) {
+        //   v.src = "";
+        //   v.parentNode.removeChild(v);
+        // }
+      }
+    } catch (ex) {
+      print("wClient: Error in Stop Function");
+    }
+  }
+
+  void play() async {
     var protocolType = "ws";
     var port = 8181;
-    if (this.useSecureConnection) {
+    if (useSecureConnection) {
       protocolType = "wss";
       port = 8182;
     }
-    this.initializeMediaSource();
-    this.v = WebSocket(
-        '$protocolType://${this.playerIp}:$port?cameraId${this.cameraId}&&id${this.elId}&&useTranscoding${this.useTranscoding}&&startTime&&mode${this.mode}&&streamtype${this.streamtype}&&ctrlInputRate');
-    this.v.binaryType = 'arraybuffer';
-    this.v.onOpen.listen((event) {
-      this.doesStopRequested = false;
-      this.v.send('Hello Server!');
-    });
-    this.v.onClose.listen((event) {
-      if (this.doesStopRequested) {
-        print('socket closed');
-      } else {
-        print('socket closed and retrying...');
-        if (this.isPlayerSet) {
-          this.showErrorMessage("trying to reconnect...");
-        }
-        this.v = null;
-        if (this.b != null) {
-          this.b.abort();
-        }
-        this.b = null;
-        this.m = null;
-        this.v = null;
-        this.isPlayerSet = false;
-        if (this.isJpeg) {
-          var i = document.getElementById('${this.elId}_img');
-          i?.remove();
-        } else {
-          var v = document.getElementById('${this.elId}_video');
-          v?.remove();
-        }
-        Future.delayed(Duration(seconds: 1), () {
-          this.play();
-        });
+    removeErrorMessage();
+    IsEmptyUrl = false;
+    if (!IsEmptyUrl) showErrorMessage("Trying to Connect...");
+    IsPlayerServerConnected = false;
+    URL_Server_Not_Connected = false;
+    Uri uri = Uri.parse(
+        "$protocolType://$wPlayerIp:$port?cameraId~~$cameraId&&mode~~$mode&&streamType~~$streamType&&startTime~~$startTime&&endTime~~$endTime&&analyticType~~$analyticType&&connectionMode~~$connectionMode&&wServerIp~~$wServerIp&&wServerPort~~$wServerPort&&clVersion~~$clVersion&&playbackSpeed~~$playbackSpeed");
+    print(uri.toString());
+    w = WebSocketChannel.connect(uri);
+    // w.binaryType = 'arraybuffer';
+    // await w.ready;
+    // w.stream.listen((open){
+
+    // });
+    w.stream.listen((data) async {
+      // print(data);
+
+      if (data == 'open') {
+        doesStopRequested = false;
+        w.sink.add('Hello Server!');
       }
-    });
-    this.v.onMessage.listen((e) {
-      switch (e.data) {
-        case "Init":
-          var errMsg = "Player is not initialized. Please call InitPlayer() first!!";
-          if (this.errorCallback != null) {
-            this.errorCallback!(errMsg);
+
+      // if (data == 'message') {
+      IsEmptyUrl = false;
+      IsPlayerServerConnected = false;
+      URL_Server_Not_Connected = false;
+      var dataStr = data.toString();
+      if (dataStr.startsWith("--version")) {
+        svVersion = dataStr.substring(10);
+        print("Client Version: $clVersion");
+        print("Server Version: $svVersion");
+        return;
+      } else if (dataStr.startsWith("--servStatus")) {
+        print(dataStr.substring(13));
+        return;
+      }
+      switch (dataStr) {
+        case "Server_ip_not_provided":
+          var errMsg = "Please Provide Valid Server Ip";
+          if (errorCallback != null) {
+            errorCallback!(errMsg);
           }
-          this.showErrorMessage(errMsg);
+          showErrorMessage(errMsg);
+          return;
+        case "Playback_Finished":
+          var errMsg = "Playback_Finished";
+          print(errMsg);
+          if (errorCallback != null) {
+            errorCallback!(errMsg);
+          }
+          stop();
+          return;
+        case "Video_Started":
+          var errMsg = "Video_Started";
+          print(errMsg);
+          if (errorCallback != null) {
+            errorCallback!(errMsg);
+          }
+          return;
+        case "unable_to_play":
+          var errMsg = "unable_to_play";
+          print(errMsg);
+          if (errorCallback != null) {
+            errorCallback!(errMsg);
+          }
+          stop();
           return;
         case "EmptyUrl":
-          var errMsg = this.mode == "Live" ? "Url not configured" : "Recording not found";
-          if (this.errorCallback != null) {
-            this.errorCallback!(errMsg);
+          IsEmptyUrl = true;
+          var errMsg =
+              mode == "Live" ? "Stream not Found" : "Recording not Found";
+          if (errorCallback != null) {
+            errorCallback!(errMsg);
           }
-          this.showErrorMessage(errMsg);
+          showErrorMessage(errMsg);
           return;
-        case "retrying":
-          if (this.retryingCallback != null) {
-            this.retryingCallback!();
+        case "Player_Server_Not_Connected":
+          IsPlayerServerConnected = true;
+          var errMsg = "Player Server Not Connected ";
+          if (errorCallback != null) {
+            errorCallback!(errMsg);
           }
-          this.showErrorMessage("trying to reconnect...");
-          try {
-            if (this.b != null && this.b.buffered != null) {
-              var start = this.b.buffered.start(0);
-              var end = this.b.buffered.end(0);
-              this.b.remove(start, end);
-            }
-          } catch (ex) {
-            print(ex);
-          }
+          showErrorMessage(errMsg);
           return;
-        case "License Expired":
-          var errMsg = "License Expired/Invalid";
-          if (this.errorCallback != null) {
-            this.errorCallback!(errMsg);
+        case "URL_Server_Not_Connected":
+          URL_Server_Not_Connected = true;
+          var errMsg = "URL Server Not Connected";
+          if (errorCallback != null) {
+            errorCallback!(errMsg);
           }
-          this.showErrorMessage(errMsg);
+          showErrorMessage(errMsg);
           return;
-        case "Some problem occured":
-          var errMsg = "Some problem occured";
-          if (this.errorCallback != null) {
-            this.errorCallback!(errMsg);
-          }
-          this.showErrorMessage(errMsg);
-          return;
-        default:
-          this.removeErrorMessage();
       }
-      if (!this.isPlayerSet) {
-        if (e.data is Uint8List) {
-          return;
-        } else {
-          if (e.data == "mp4") {
-            this.removeErrorMessage();
-            this.v = VideoElement();
-            var div = document.getElementById(this.elId);
-            div!.style.background = "black";
-            div.append(this.v);
-            this.v.id = '${this.elId}_video';
-            this.v.src = Url.createObjectUrlFromBlob(this.m);
-            this.v.controls = true;
-            this.v.autoplay = true;
-            this.v.style.width = "100%";
-            this.isPlayerSet = true;
-            this.isJpeg = false;
-          } else {
-            this.removeErrorMessage();
-            var div = document.getElementById(this.elId);
-            div!.style.background = "black";
-            var img = ImageElement();
-            div.append(img);
-            img.id = '${this.elId}_img';
-            img.style.width = "100%";
-            img.style.height = "100%";
-            this.isPlayerSet = true;
-            this.isJpeg = true;
-          }
-        }
+      // if (!isPlayerSet) {
+      print("rdbaData:: ${data}");
+      if (data != 'mp4') {
+        var dt = await H264
+            .decodeFrame(
+              data,
+              data,
+              200,
+              200,
+            )
+            .then((ignored) => data);
+
+        print("decoded data :: ${dt}");
+
+        var rgba_data = Uint8List.fromList(data);
+
+        // ui.Image img =await   _loadImageFromBytes(rgba_data, 200, 200);
+        changables.videoContainerWidget.value = Container(
+          child: Image.memory(rgba_data, width: 200, height: 200),
+          width: 200,
+          color: Colors.black,
+          height: 200,
+        );
       }
-      if (this.isJpeg) {
-        var img = document.getElementById('${this.elId}_img') as ImageElement;
-        if (e.data is Uint8List) {
-          var arr = e.data;
-          var base64String = this.arrayBufferToBase64(arr);
-          img!.src = 'data:image/jpeg;base64,$base64String';
-        }
+
+      if (isRgb) {
+        //Create a canvas element for RGB data
+
+        // changables.videoContainerWidget.value = Container(
+        //   key: Key("${elId}_canvas"),
+        //   color: Colors.black,
+        //   height: 200,
+        //   width: 200,
+        // );
+
+        // var c = document.createElement('canvas');
+        // c.id = "${elId}_canvas";
+        // document.getElementById(elId).append(c);
+        // width = document.getElementById(elId).clientWidth;
+        // height = document.getElementById(elId).clientHeight;
+        // c.width = width;
+        // c.height = height;
       } else {
-        if (e.data is Uint8List) {
-          var intS = e.data;
-          if (!this.isSourceReady) {
-            this.intS = intS;
-            return;
+        // changables.videoContainerWidget.value = Container(
+        //   key: Key("${elId}_video"),
+        //   height: 200,
+        //   color: Colors.black,
+        //   width: 200,
+        // );
+        // var v = document.createElement('video');
+        // v.id = "${elId}_video";
+        // v.controls = true;
+        // document.getElementById(elId).append(v);
+        // v.style.width = "100%";
+        // v.style.height = "100%";
+        // jmuxer = JMuxer({
+        //   'node': v,
+        //   'mode': mode.toLowerCase() == "playback" ? 'both' : 'video',
+        //   'flushingTime': 0,
+        //   'clearBuffer': true,
+        //   'debug': false
+        // });
+      }
+      isPlayerSet = true;
+      // }
+      if (isRgb) {
+        var frameLen = 1000 / 24;
+        var p = 0;
+        // var c = document.getElementById("${elId}_canvas");
+        // if (c != null) {
+        //   var c_context = c.getContext('2d');
+        //   c_context.clearRect(0, 0, width, height);
+        //   var imgData = c_context.createImageData(width, height);
+        var rgba_data = Uint8List.fromList(data);
+        // ui.Image img =await   _loadImageFromBytes(rgba_data, 200, 200);
+        changables.videoContainerWidget.value = Container(
+          child: Image.memory(rgba_data),
+          width: 200,
+          color: Colors.black,
+          height: 200,
+        );
+
+        // var ndata = 200 * 200 * 4;
+        // for (var i = 0; i < ndata; i += 4) {
+        //   imgData.data[i] = rgba_data[p];
+        //   imgData.data[i + 1] = rgba_data[p + 1];
+        //   imgData.data[i + 2] = rgba_data[p + 2];
+        //   imgData.data[i + 3] = 255;
+        //   p += 3;
+        // }
+        // c_context.putImageData(imgData, 0, 0);
+        //   }
+        // } else {
+        //   jmuxer.feed({'video': e.data});
+        // }
+        removeErrorMessage();
+        isVisible = true;
+      }
+      // }
+      if (data == 'error') {
+        showErrorMessage("Player Not Connected...");
+        w = null;
+        if (jmuxer != null) {
+          disposejmuxer();
+        }
+        c = null;
+        v = null;
+        isPlayerSet = false;
+        isVisible = false;
+        if (isRgb) {
+          changables.videoContainerWidget.value = Container(
+              child: Text("error Palying RGB",
+                  style: TextStyle(color: Colors.red)),
+              color: Colors.black,
+              width: 200,
+              height: 200);
+          // var c = document.getElementById("${elId}_canvas");
+          // if (c != null) {
+          //   var c_context = c.getContext('2d');
+          //   c_context.clearRect(0, 0, width, height);
+          //   c.parentNode.removeChild(c);
+          // }
+        } else {
+          changables.videoContainerWidget.value = Container(
+              child: Text("error Palying", style: TextStyle(color: Colors.red)),
+              width: 200,
+              height: 200,
+              color: Colors.black);
+          // var v = document.getElementById("${elId}_video");
+          // if (v != null) {
+          //   v.src = "";
+          //   v.parentNode.removeChild(v);
+          // }
+        }
+        Future.delayed(Duration(seconds: 3), () {
+          if (!doesStopRequested) {
+            play();
           }
-          if (!this.b.updating && this.m.readyState == 'open') {
-            this.b.appendBuffer(intS);
+        });
+      }
+
+      if (data == 'close') {
+        if (doesStopRequested) {
+          print('socket closed');
+          removeErrorMessage();
+        } else {
+          print('socket closed and retrying...');
+          if (IsPlayerServerConnected) {
+            var errMsg = "Player Server Not Connected ";
+            showErrorMessage(errMsg);
+          } else if (URL_Server_Not_Connected) {
+            var errMsg = "URL Server Not Connected";
+            showErrorMessage(errMsg);
+          } else if (IsEmptyUrl) {
+            var errMsg =
+                mode == "Live" ? "Stream not Found" : "Recording not Found";
+            showErrorMessage(errMsg);
           } else {
-            this.lastSegment = intS;
+            showErrorMessage("Player Not Connected...");
           }
+          w = null;
+          if (jmuxer != null) {
+            disposejmuxer();
+          }
+          c = null;
+          v = null;
+          isPlayerSet = false;
+          isVisible = false;
+          if (isRgb) {
+            changables.videoContainerWidget.value = Container(
+                child: Text("remove video RGB",
+                    style: TextStyle(color: Colors.red)),
+                width: 200,
+                height: 200,
+                color: Colors.black);
+            // var c = document.getElementById("${elId}_canvas");
+            // if (c != null) {
+            //   var c_context = c.getContext('2d');
+            //   c_context.clearRect(0, 0, width, height);
+            //   c.parentNode.removeChild(c);
+            // }
+          } else {
+            changables.videoContainerWidget.value = Container(
+                child:
+                    Text("error Palying", style: TextStyle(color: Colors.red)),
+                width: 200,
+                height: 200,
+                color: Colors.black);
+            // var v = document.getElementById("${elId}_video");
+            // if (v != null) {
+            //   v.src = "";
+            //   v.parentNode.removeChild(v);
+            // }
+          }
+          Future.delayed(Duration(seconds: 3), () {
+            if (!doesStopRequested) {
+              play();
+            }
+          });
         }
       }
     });
-    this.v.onError.listen((event) {
-      print(event);
-      var errMsg = "Websocket connection failed. Please check if player is running.";
-      this.showErrorMessage(errMsg);
-      if (this.errorCallback != null) {
-        this.errorCallback!(errMsg);
-      }
-    });
+    // w.stream.listen('message', (e) {
+
+    // });
+
+    // w.stream.listen('error', {});
   }
 
-  void showErrorMessage(String errMsg) {
-    var eDiv = document.getElementById('${this.elId}_error');
-    if (eDiv == null) {
-      eDiv = DivElement();
-      eDiv.id = '${this.elId}_error';
-      eDiv.style.color = "white";
-      var div = document.getElementById(this.elId);
-      div!.append(eDiv);
+  void disposejmuxer() {
+    if (jmuxer != null) {
+      jmuxer.destroy();
+      jmuxer = null;
     }
-    eDiv.text = errMsg;
+  }
+
+  Future<ui.Image> _loadImageFromBytes(
+      Uint8List bytes, int width, int height) async {
+    final Completer<ui.Image> completer = Completer();
+    ui.decodeImageFromPixels(
+        bytes, width, height, ui.PixelFormat.rgba8888, completer.complete);
+    return completer.future;
+  }
+
+  void showErrorMessage(String msg) {
+    removeErrorMessage();
+    isErrorMessageVisible = true;
+    changables.videoContainerWidget.value = Container(
+        child: Text(msg, style: TextStyle(color: Colors.red)),
+        width: 200,
+        height: 200,
+        color: Colors.black);
+    // var elIdDiv = document.getElementById(elId);
+    // if (elIdDiv != null) {
+    //   var div = document.createElement('div');
+    //   div.id = "${elId}_error";
+    //   div.innerHTML = msg;
+    //   div.style.cssText = 'width: 100%;height: 100%;display: flex;justify-content: center;align-items: center;position: absolute;background: rgba(0,0,0,0.5);color: white;z-index: 1;';
+    //   elIdDiv.appendChild(div);
+    // }
   }
 
   void removeErrorMessage() {
-    var eDiv = document.getElementById('${this.elId}_error');
-    eDiv?.remove();
+    changables.videoContainerWidget.value = Container(
+        child: Text("remove error", style: TextStyle(color: Colors.red)),
+        width: 200,
+        height: 200,
+        color: Colors.black);
+    // var errorDiv = document.getElementById("${elId}_error");
+    // if (errorDiv != null) {
+    //   errorDiv.parentNode.removeChild(errorDiv);
+    // }
+    // isErrorMessageVisible = false;
   }
-}
 
-void main() {
-  var controller = WebLiveController("playerIP", "serverIp", "playerId", "cameraId");
+  void SeekVideo(int startTime) {
+    stop();
+    this.startTime = startTime;
+    play();
+  }
+
+  void Pause() {
+    if (w != null) {
+      w.sink.add("Pause");
+    }
+  }
+
+  void FastForward(double factor) {
+    if (w != null) {
+      w.sink.add("FastForward:$factor");
+    }
+  }
 }

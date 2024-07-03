@@ -3,15 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:srtp_demo/changables.dart';
 import 'package:srtp_demo/i2v-player.dart';
+import 'package:srtp_demo/player.dart';
 // import 'package:srtp_demo/live_controller.dart';
 // import 'package:srtp_demo/player.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+
 // import 'dart:convert';
 // import 'dart:io';
-
-// import 'package:flutter/material.dart';
-// import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
   runApp(const MyApp());
@@ -67,91 +66,55 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-
-
-
-
-
-
-
-
-
-
-
 class _MyHomePageState extends State<MyHomePage> {
-  
-// late WebPlayer controller;
- late WebViewController _controller;
+  late WebPlayer controller;
 
   @override
   void initState() {
     super.initState();
-    _controller= WebViewController();
-    // controller = WebPlayer();
-    //   controller.initialize('100', giveWebPlayerID());
-    //   controller.play();
-    if (Platform.isAndroid) {
-      _loadHtmlFromAssets();
-      // WebView.platform = SurfaceAndroidWebView();
-    }
+    controller = WebPlayer();
+    controller.initialize('100', giveWebPlayerID());
+    controller.play();
   }
 
-
   String giveWebPlayerID() {
-    return "";
+    return "08dc9a7d-3ffe-ca14-00be-430210900000";
     // endPart.split("/")[1].split("_")[0];
   }
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+        valueListenable: changables.videoContainerWidget,
+        builder: (context, value, _) {
+          return Scaffold(
+            appBar: AppBar(
+              backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+              title: Text(widget.title),
+            ),
+            body: Center(
+              child: Container(
+                  child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 300,
+                    height: 300,
+                    child: changables.videoContainerWidget.value,
+                  ),
+                  TextButton(
+                    onPressed: () {},
+                    child: const Icon(Icons.play_arrow),
+                  ),
+                ],
+              )
 
-    return Scaffold(
-      appBar: AppBar(
-       
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-       
-        title: Text(widget.title),
-      ),
-      body:Center(
-        child: Container(
-         
-          child: Column(children: [
-          Container(
-            width: 300,
-            height: 300,
-            child: WebViewWidget(  
-              controller: _controller,
-            // initialUrl: 'about:blank',
-            // javascriptMode: JavascriptMode.unrestricted,
-            // onWebViewCreated: (WebViewController webViewController) {
-            //   _controller = webViewController;
-            //   _loadHtmlFromAssets();
-            // },
-                    ),
-          ),
-        TextButton(
-          onPressed: () {
-            _initPlayer();
-          },
-          child: const Icon(Icons.play_arrow),
-        ),
-          ],)
-          
-          
-        
-          // / openCam[index]
+                  // / openCam[index]
                   //     .IgnorePointer(child: VlcPlayerStateless(controller))
                   ),
-      ),
-      // ),
-    );
-  }
-    _loadHtmlFromAssets() async {
-    // String fileText = await rootBundle.loadString('index.html');
-    // _controller.loadHtmlString(Uri.dataFromString(fileText, mimeType: 'text/html', encoding: Encoding.getByName('utf-8')).toString());
-  }
-
-  _initPlayer() async {
-    _controller.runJavaScript(JSCODE.jstring);
+            ),
+            // ),
+          );
+        });
   }
 }
