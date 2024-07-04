@@ -73,13 +73,16 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     super.initState();
     controller = WebPlayer();
-    controller.initialize('100', giveWebPlayerID());
-    controller.play();
   }
 
   String giveWebPlayerID() {
     return "08dc9a7d-3ffe-ca14-00be-430210900000";
     // endPart.split("/")[1].split("_")[0];
+  }
+
+  playVideo() {
+    controller.initialize('100', giveWebPlayerID());
+    controller.play();
   }
 
   @override
@@ -103,7 +106,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: changables.videoContainerWidget.value,
                   ),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      playVideo();
+                    },
                     child: const Icon(Icons.play_arrow),
                   ),
                 ],

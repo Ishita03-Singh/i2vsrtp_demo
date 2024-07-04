@@ -39,6 +39,9 @@ dependencies:
   webview_flutter:
   web_socket_channel:
   flutter_inappwebview:
+  flutter_ffmpeg:
+  path_provider:
+  video_player:
   # h264:
     # path: E:\i2vprojects\h264Plugin\flutter_plugin_h264
 
