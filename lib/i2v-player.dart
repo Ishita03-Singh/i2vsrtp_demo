@@ -285,16 +285,9 @@ class I2vPlayer {
 
     //player
     final directory = await getTemporaryDirectory();
-    final String inputPath = '${directory.path}/input.h264';
+    final String inputPath = '${directory.path}/input.264';
     final String outputPath = '${directory.path}/output.mp4';
     bool isInitialised = false;
-
-    VideoPlayerController _controller =
-        VideoPlayerController.file(File(outputPath))
-          ..initialize().then((_) {
-            // setState(() {});
-            isInitialised = true;
-          });
 
     w.stream.listen((data) async {
       if (data == 'open') {
@@ -373,32 +366,52 @@ class I2vPlayer {
       }
       print("rdbaData:: ${data}");
       if (data != 'mp4') {
-        var rgba_data = Uint8List.fromList(data);
+        // var rgba_data = Uint8List.fromList(data);
 
-        File(inputPath).writeAsBytes(rgba_data);
+        // File(inputPath).writeAsBytesSync(data);
 
-        // Convert H264 to MP4 using FFmpeg
-        _flutterFFmpeg.execute('-i $inputPath -c:v copy $outputPath');
+        // Uint8List inputFileContent = File(inputPath).readAsBytesSync();
+        // print(inputFileContent);
+        // // Convert H264 to MP4 using FFmpeg
+        // var t = await _flutterFFmpeg.executeAsync(
+        //     'ffmpeg  -i $inputPath  $outputPath', (CompletedFFmpegExecution) {
+        //   print("Execution successful");
+        // });
+        // print("ffmpeg res::" + t.toString());
 
-        String outputFileContent = File(outputPath).readAsStringSync();
-        print(outputFileContent);
+        // String outputFileContent = File(outputPath).readAsStringSync();
+        // print(outputFileContent);
 
         // Initialize video player with the output file
-
-        if (isInitialised) {
-          _controller.play();
-        }
+        // VideoPlayerController _controller =
+        //     VideoPlayerController.asset(data)
+        //       ..initialize().then((_) {
+        //         // setState(() {});
+        //         isInitialised = true;
+        //       });
+        // if (isInitialised) {
+        //   _controller.play();
+        // }
         // if (_controller != null && _controller.value.isInitialized) {
-        changables.videoContainerWidget.value = VideoPlayer(_controller);
+        // changables.videoContainerWidget.value = VideoPlayer(_controller);
         // }
 
         // });
-        // changables.videoContainerWidget.value  = Container(
-        //     child: Image.memory(rgba_data, width: 200, height: 200),
-        //     width: 200,
-        //     color: Colors.black,
-        //     height: 200,
-        //   );
+        print(data.toString().length);
+        changables.videoContainerWidget.value = CustomPaint(
+          painter: rawRGBToImage(data, 400, 400),
+          child: Container(width: 400, height: 400),
+        );
+        // Container(
+        //   child: rawRGBToImage(data, 400, 400) ??
+        //       Text(
+        //         "failed to get image",
+        //         style: TextStyle(color: Colors.red),
+        //       ),
+        //   width: 200,
+        //   color: Colors.black,
+        //   height: 200,
+        // );
 
         if (isRgb) {
         } else {}
@@ -408,9 +421,13 @@ class I2vPlayer {
           var frameLen = 1000 / 24;
           var p = 0;
 
-          var rgba_data = Uint8List.fromList(data);
+          // var rgba_data = Uint8List.fromList(data);
           changables.videoContainerWidget.value = Container(
-            child: Image.memory(rgba_data),
+            child: rawRGBToImage(data, 200, 200) ??
+                Text(
+                  "failed to get image",
+                  style: TextStyle(color: Colors.red),
+                ),
             width: 200,
             color: Colors.black,
             height: 200,
@@ -505,6 +522,39 @@ class I2vPlayer {
     });
   }
 
+  rawRGBToImage(Uint8List rgbBytes, int width, int height) {
+    int expectedLength = width * height * 4;
+    final Completer<ui.Image> completer = Completer();
+    Uint8List bytes = new Uint8List(expectedLength);
+    if (rgbBytes.length > expectedLength) {
+      bytes = rgbBytes.sublist(0, expectedLength);
+    } else if (rgbBytes.length < expectedLength) {
+      Uint8List padded = Uint8List(expectedLength);
+      padded.setRange(0, rgbBytes.length, rgbBytes);
+      bytes = padded;
+    }
+    ui.Image? imag;
+    // Ensure the byte data length matches width * height * 4 (RGBA8888)
+    // if (rgbBytes.length != width * height * 4) {
+    //   throw Exception(
+    //       'Invalid RGB byte data length for the specified width and height');
+    // }
+    try {
+      ui.decodeImageFromPixels(
+        bytes,
+        width,
+        height,
+        ui.PixelFormat.rgba8888,
+        (ui.Image img) {
+          imag = img;
+          print("Image decoded successfully");
+        },
+      );
+    } catch (ex) {
+      print("EXCEPTION::" + ex.toString());
+    }
+    return imag;
+  }
 //  void _loadHtmlFromAssets() async {
 //     String fileText = await rootBundle.loadString('assets/index.html');
 //     _controller.loadUrl(Uri.dataFromString(
