@@ -13,15 +13,15 @@ class WebPlayer {
     Localstore.instance.playerRef(50).dispose(controller);
   }
 
-  void initialize(String playerId, String cameraId)  {
+  void initialize(String playerId, String cameraId) {
     // controller = js.context.callMethod(
     //     'WebPlayerController', [serverIp, streamerIp, playerId, cameraId]);
     // controller =
     //     WebLiveController('192.168.0.48', '192.168.0.48', playerId, cameraId);
     //  'webLiveController', [serverIp, streamerIp, playerId, cameraId]
-    controller =  Localstore.instance
+    controller = Localstore.instance
         .playerRef(50)
-        .initialize('192.168.5.103', '192.168.5.103', playerId, cameraId);
+        .initialize('192.168.5.151', '192.168.5.151', playerId, cameraId);
   }
 
   void play() {

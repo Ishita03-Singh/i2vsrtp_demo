@@ -304,7 +304,7 @@ class I2vPlayer {
         print("Server Version: $svVersion");
         return;
       } else if (dataStr.startsWith("--servStatus")) {
-        print(dataStr.substring(13));
+        // print(dataStr.substring(13));
         return;
       }
       switch (dataStr) {
@@ -364,7 +364,7 @@ class I2vPlayer {
           showErrorMessage(errMsg);
           return;
       }
-      print("rdbaData:: ${data}");
+      // print("rdbaData:: ${data}");
       if (data != 'mp4') {
         // var rgba_data = Uint8List.fromList(data);
 
@@ -397,11 +397,32 @@ class I2vPlayer {
         // }
 
         // });
-        print(data.toString().length);
-        changables.videoContainerWidget.value = CustomPaint(
-          painter: rawRGBToImage(data, 400, 400),
-          child: Container(width: 400, height: 400),
+        // print(data.toString().length);
+        var image = await loadImage(data);
+        changables.videoContainerWidget.value = Container(
+          color: Colors.black,
+          child: image != null
+              ? CustomPaint(
+                  painter: ImagePainter(image!),
+                  child: Container(width: 400, height: 400),
+                )
+              : Text(
+                  "failed to get image",
+                  style: TextStyle(color: Colors.red),
+                ),
+          width: 200,
+          // color: Colors.black,
+          height: 200,
         );
+
+        // CustomPaint(
+        //   painter: ImagePainter(image!),
+        //   child: Container(
+        //     width: 400,
+        //     height: 400,
+        //     // color: Colors.black,
+        //   ),
+        // );
         // Container(
         //   child: rawRGBToImage(data, 400, 400) ??
         //       Text(
@@ -422,14 +443,21 @@ class I2vPlayer {
           var p = 0;
 
           // var rgba_data = Uint8List.fromList(data);
+          var image = await loadImage(data);
+
           changables.videoContainerWidget.value = Container(
-            child: rawRGBToImage(data, 200, 200) ??
-                Text(
-                  "failed to get image",
-                  style: TextStyle(color: Colors.red),
-                ),
-            width: 200,
             color: Colors.black,
+            child: image != null
+                ? CustomPaint(
+                    painter: ImagePainter(image!),
+                    child: Container(width: 400, height: 400),
+                  )
+                : Text(
+                    "failed to get image",
+                    style: TextStyle(color: Colors.red),
+                  ),
+            width: 200,
+            // color: Colors.black,
             height: 200,
           );
 
@@ -522,9 +550,40 @@ class I2vPlayer {
     });
   }
 
-  rawRGBToImage(Uint8List rgbBytes, int width, int height) {
-    int expectedLength = width * height * 4;
-    final Completer<ui.Image> completer = Completer();
+  Future<ui.Image?> loadImage(data) async {
+    Uint8List rgbBytes = data;
+    int width = 400;
+    int height = 400;
+
+    try {
+      ui.Image image = await rawRGBToImage(rgbBytes, width, height);
+      return image;
+      print("Image decoded successfully: $image");
+      // Use the image here
+    } catch (e) {
+      print("Failed to decode image: $e");
+    }
+    return null;
+  }
+
+  Uint8List convertRgbToRgba(Uint8List rgbBytes, int width, int height) {
+    // int rgbLength = width * height * 3;
+    int rgbaLength = width * height * 4;
+    Uint8List rgbaBytes = Uint8List(rgbaLength);
+
+    for (int i = 0, j = 0; i < rgbBytes.length; i += 3, j += 4) {
+      rgbaBytes[j] = rgbBytes[i]; // R
+      rgbaBytes[j + 1] = rgbBytes[i + 1]; // G
+      rgbaBytes[j + 2] = rgbBytes[i + 2]; // B
+      rgbaBytes[j + 3] = 255; // A (full opacity)
+    }
+
+    return rgbaBytes;
+  }
+
+  Future<ui.Image> rawRGBToImage(Uint8List rgbBytes, int width, int height) {
+    int expectedLength = width * height * 3;
+    Uint8List rgbaList = new Uint8List(width * height * 4);
     Uint8List bytes = new Uint8List(expectedLength);
     if (rgbBytes.length > expectedLength) {
       bytes = rgbBytes.sublist(0, expectedLength);
@@ -533,12 +592,9 @@ class I2vPlayer {
       padded.setRange(0, rgbBytes.length, rgbBytes);
       bytes = padded;
     }
-    ui.Image? imag;
-    // Ensure the byte data length matches width * height * 4 (RGBA8888)
-    // if (rgbBytes.length != width * height * 4) {
-    //   throw Exception(
-    //       'Invalid RGB byte data length for the specified width and height');
-    // }
+    rgbaList = convertRgbToRgba(bytes, width, height);
+
+    final Completer<ui.Image> completer = Completer();
     try {
       ui.decodeImageFromPixels(
         bytes,
@@ -546,14 +602,15 @@ class I2vPlayer {
         height,
         ui.PixelFormat.rgba8888,
         (ui.Image img) {
-          imag = img;
+          completer.complete(img);
           print("Image decoded successfully");
         },
       );
     } catch (ex) {
+      completer.completeError(ex);
       print("EXCEPTION::" + ex.toString());
     }
-    return imag;
+    return completer.future;
   }
 //  void _loadHtmlFromAssets() async {
 //     String fileText = await rootBundle.loadString('assets/index.html');
@@ -626,5 +683,27 @@ class I2vPlayer {
     if (w != null) {
       w.sink.add("FastForward:$factor");
     }
+  }
+}
+
+class ImagePainter extends CustomPainter {
+  final ui.Image image;
+
+  ImagePainter(this.image);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Draw the image on the canvas
+    paintImage(
+      canvas: canvas,
+      rect: Rect.fromLTWH(0, 0, size.width, size.height),
+      image: image,
+      fit: BoxFit.cover,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) {
+    return false; // Change this if the painting needs to be updated
   }
 }
